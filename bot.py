@@ -10,7 +10,7 @@ import re
 import json
 
 # Aapki Details
-TOKEN = "8350483074:AAEZAA9jhGTmhUA9Kw0AUFAERbleqRvZeyg" 
+TOKEN = "8350483074:AAGPWo7Kt7wSZ8zW4xzIKwoRY6R1UjhFL3Y" 
 ADMIN_ID = 1484173564
 
 bot = telebot.TeleBot(TOKEN)
@@ -250,6 +250,8 @@ def handle_join_request(request: ChatJoinRequest):
     user_id = request.from_user.id
     ch_id = request.chat.id
     
+    # Ye function SIRF request ko memory me save karega,
+    # bot khud accept NAHI karega. Accept karna aapka kaam hai.
     if user_id not in USER_REQUESTS:
         USER_REQUESTS[user_id] = []
         
@@ -262,7 +264,8 @@ def handle_join_request(request: ChatJoinRequest):
 def check_user_joined(user_id):
     not_joined = []
     for ch_id in CHANNELS:
-        # Kya user ne Request to join bheji hai? Agar haan, toh usko joined maano.
+        # Check karega: Kya user ne Request bheji hai?
+        # Agar request bheji hai, toh bot usey "Pass" maan lega (not_joined me add nahi karega).
         if user_id in USER_REQUESTS and ch_id in USER_REQUESTS[user_id]:
             continue 
 
@@ -274,17 +277,16 @@ def check_user_joined(user_id):
             not_joined.append(ch_id)
     return not_joined
 
-def get_full_keyboard():
-    # 🔥 YAHAN CHANGE KIYA HAI: Ye function hamesha SAARE channels dikhayega
+def get_sub_keyboard(not_joined_channels):
+    # 🔥 YE FUNCTION AB SIRF WAHI BUTTONS BANAYEGA JO JOIN KARNE BAAKI HAIN
     markup = InlineKeyboardMarkup()
     temp_row = []
     
-    channels_list = list(CHANNELS.keys())
-    for i, ch_id in enumerate(channels_list):
+    for i, ch_id in enumerate(not_joined_channels):
         data = CHANNELS[ch_id]
         temp_row.append(InlineKeyboardButton(text=f"Join {data['name']}", url=data['url'], style=data['color']))
         
-        if len(temp_row) == 2 or (i == len(channels_list) - 1 and not temp_row):
+        if len(temp_row) == 2 or (i == len(not_joined_channels) - 1 and not temp_row):
             markup.row(*temp_row)
             temp_row = []
     
@@ -305,8 +307,8 @@ def start_cmd(message):
         send_hidden_file(message.from_user.id, message.chat.id)
         return
 
-    # User ko video aur SAARE buttons dikhao
-    bot.send_video(message.chat.id, video=VIDEO_URL, caption=caption, reply_markup=get_full_keyboard())
+    # User ko video aur SIRF BAAKI bache hue buttons dikhao
+    bot.send_video(message.chat.id, video=VIDEO_URL, caption=caption, reply_markup=get_sub_keyboard(not_joined))
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def verify_join(call):
@@ -315,6 +317,15 @@ def verify_join(call):
     
     if len(not_joined) > 0:
         bot.answer_callback_query(call.id, "❌ Aapne abhi tak saare channels join/request nahi kiye hain!", show_alert=True)
+        # 🔥 VIDEO JAISA EFFECT: Try Again dabane par jo join ho gaye hain unke button gayab kar do
+        try:
+            bot.edit_message_reply_markup(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                reply_markup=get_sub_keyboard(not_joined)
+            )
+        except Exception:
+            pass # Agar koi button gayab nahi karna hai (kyunki user ne kuch naya join nahi kiya) toh error ignore karo
     else:
         bot.answer_callback_query(call.id, "✅ Verification Successful!")
         bot.delete_message(call.message.chat.id, call.message.message_id)
